@@ -17,7 +17,11 @@ jobs:
 
       - name: build
         run: cmake --build build --config release
-
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: sshpass
+          path: build/Release/sshpass.exe
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')

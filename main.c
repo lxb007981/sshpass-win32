@@ -122,7 +122,7 @@ int wmain(int argc, const wchar_t* argv[]) {
     }
 
     ParseArgs(argc, argv, argvUtf8, &ctx);
-
+    
     HRESULT hr = E_UNEXPECTED;
 
     ctx.pipeIn = INVALID_HANDLE_VALUE;
@@ -385,6 +385,8 @@ static void __cdecl PipeListener(LPVOID arg) {
     Context* ctx = arg;
 
     char buffer[BUFFER_SIZE + 1] = {0};
+    char pending[4096] = {0}; 
+    size_t pendingLen = 0;
 
     DWORD bytesRead;
 
@@ -398,7 +400,30 @@ static void __cdecl PipeListener(LPVOID arg) {
             break;
         }
         buffer[bytesRead] = 0;
-        state = ProcessOutput(ctx, buffer, bytesRead, state);
+        if (state == INIT) {
+            if (pendingLen + bytesRead >= sizeof(pending) - 1) {
+                // Pending buffer is full. Keep the latest 1024 bytes to ensure we don't cut a prompt in half
+                size_t keep = 1024;
+                if (pendingLen < keep) keep = pendingLen;
+                memmove(pending, pending + pendingLen - keep, keep);
+                pendingLen = keep;
+                pending[pendingLen] = 0;
+            }
+
+            memcpy(pending + pendingLen, buffer, bytesRead);
+            pendingLen += bytesRead;
+            pending[pendingLen] = 0;
+            State newState = ProcessOutput(ctx, pending, pendingLen, state);
+            if (newState != INIT) {
+                fprintf(stdout, "%s", pending);
+                pendingLen = 0;
+                pending[0] = 0;
+            }
+
+            state = newState;
+        } else {
+            state = ProcessOutput(ctx, buffer, bytesRead, state);
+        }
         if (state == END) {
             break;
         }
