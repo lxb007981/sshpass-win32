@@ -25,6 +25,7 @@ typedef struct {
 
     const char* passPrompt;
     int verbose;
+    int autoConfirm;
 
     wchar_t* cmd;
 } Args;
@@ -191,6 +192,7 @@ static void ParseArgs(int argc, const wchar_t* wargv[], char** argv, Context* ct
 
     const char* passPrompt = NULL;
     int verbose = 0;
+    int autoConfirm = 0;
     int totalArgc = argc;
 
     struct argparse_option options[] = {
@@ -208,6 +210,7 @@ static void ParseArgs(int argc, const wchar_t* wargv[], char** argv, Context* ct
                        "Which string should sshpass search for to detect a password prompt", NULL,
                        0, 0),
             OPT_BOOLEAN('v', NULL, &verbose, "Be verbose about what you're doing", NULL, 0, 0),
+            OPT_BOOLEAN('k', "auto-confirm", &autoConfirm, "Auto confirm 'Are you sure...' prompt for host keys", NULL, 0, 0),
             OPT_END(),
     };
 
@@ -220,6 +223,7 @@ static void ParseArgs(int argc, const wchar_t* wargv[], char** argv, Context* ct
     }
 
     ctx->args.verbose = verbose;
+    ctx->args.autoConfirm = autoConfirm;
     if (filename != NULL) {
         ctx->args.pwtype = PWT_FILE;
         ctx->args.pwsrc.filename = ToUtf16(filename);
@@ -331,12 +335,23 @@ static BOOL IsWaitInputPass(Context* ctx, const char* buffer, DWORD len) {
     return TRUE;
 }
 
+static BOOL IsWaitConfirmation(const char* buffer) {
+    /* prompt: "Are you sure you want to continue connecting (yes/no/[fingerprint])?" */
+    if (strstr(buffer, "Are you sure you want to continue connecting") != NULL) {
+        return TRUE;
+    }
+    return FALSE;
+}
+
 typedef enum { INIT, VERIFY, EXEC, END } State;
 
 static State ProcessOutput(Context* ctx, const char* buffer, DWORD len, State state) {
     State nextState;
     switch (state) {
     case INIT: {
+        if (ctx->args.autoConfirm && IsWaitConfirmation(buffer)) {
+             WriteFile(ctx->pipeOut, "yes\n", 4, NULL, NULL);
+        }
         if (!IsWaitInputPass(ctx, buffer, len)) {
             nextState = INIT;
         } else {

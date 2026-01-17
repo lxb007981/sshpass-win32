@@ -24,6 +24,7 @@ Password options: With no options - password will be taken from stdin
 Other options:
     -P=<str>      Which string should sshpass search for to detect a password prompt
     -v            Be verbose about what you're doing
+    -k            Auto confirm 'Are you sure...' prompt for host keys
 ```
 
 # Examples
